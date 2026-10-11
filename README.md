@@ -21,11 +21,16 @@ To force a rebuild, run the **build** workflow manually with **force** checked.
 
 ## Install on Unraid
 
-From Community Apps, search for **house-planner**. To install before the listing is approved, open **Docker → Add Container**, paste this URL into **Template**, and apply:
+From Community Apps, search for **house-planner**.
+
+To install before the listing is approved, download the template into Unraid's user templates folder from the Unraid terminal:
 
 ```
-https://raw.githubusercontent.com/jarretraim/house-planner-unraid/main/templates/house-planner.xml
+wget -O /boot/config/plugins/dockerMan/templates-user/my-house-planner.xml \
+  https://raw.githubusercontent.com/jarretraim/house-planner-unraid/main/templates/house-planner.xml
 ```
+
+Then open **Docker → Add Container**, pick **house-planner** from the **Template** dropdown, and apply.
 
 | Setting | Container | Default | Notes |
 |---|---|---|---|
