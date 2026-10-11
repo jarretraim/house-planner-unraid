@@ -1,0 +1,144 @@
+name: build
+
+# Builds the unmodified upstream source into ghcr.io/jarretraim/house-planner.
+# Nothing from upstream is vendored here: each run resolves upstream's main
+# branch to a commit and, if no image exists for that commit yet, builds it
+# straight from the upstream Git URL, smoke-tests it and pushes :latest.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild even if an image for the current upstream commit exists
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths: [.github/workflows/build.yml]
+
+permissions:
+  contents: read
+  packages: write
+  actions: write # keepalive step below
+
+concurrency:
+  group: build
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: egmalt/house-planner
+  UPSTREAM_BRANCH: main
+  IMAGE: ghcr.io/jarretraim/house-planner
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve upstream commit
+        id: upstream
+        run: |
+          set -euo pipefail
+          sha=$(git ls-remote "https://github.com/$UPSTREAM_REPO.git" "refs/heads/$UPSTREAM_BRANCH" | cut -f1)
+          [ -n "$sha" ] || { echo "could not resolve $UPSTREAM_REPO@$UPSTREAM_BRANCH"; exit 1; }
+          version=$(curl -fsSL "https://raw.githubusercontent.com/$UPSTREAM_REPO/$sha/package.json" | jq -r '.version // empty')
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "short=${sha:0:7}" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "upstream $UPSTREAM_REPO@$UPSTREAM_BRANCH = $sha (version ${version:-unknown})"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for an existing image
+        id: check
+        env:
+          FORCE: ${{ github.event_name == 'push' || inputs.force == true }}
+        run: |
+          if [ "$FORCE" != "true" ] && docker buildx imagetools inspect "$IMAGE:sha-${{ steps.upstream.outputs.sha }}" >/dev/null 2>&1; then
+            echo "image for ${{ steps.upstream.outputs.short }} already published, nothing to do"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.check.outputs.build == 'true'
+
+      - name: Image metadata
+        if: steps.check.outputs.build == 'true'
+        id: meta
+        run: |
+          {
+            echo "tags<<EOF"
+            echo "$IMAGE:latest"
+            echo "$IMAGE:sha-${{ steps.upstream.outputs.sha }}"
+            echo "$IMAGE:${{ steps.upstream.outputs.short }}"
+            [ -n "${{ steps.upstream.outputs.version }}" ] && echo "$IMAGE:${{ steps.upstream.outputs.version }}"
+            echo "EOF"
+            echo "labels<<EOF"
+            echo "org.opencontainers.image.title=House Planner"
+            echo "org.opencontainers.image.description=House Planner built from https://github.com/$UPSTREAM_REPO for Unraid"
+            echo "org.opencontainers.image.source=https://github.com/${{ github.repository }}"
+            echo "org.opencontainers.image.url=https://github.com/$UPSTREAM_REPO"
+            echo "org.opencontainers.image.revision=${{ steps.upstream.outputs.sha }}"
+            echo "org.opencontainers.image.version=${{ steps.upstream.outputs.version }}"
+            echo "org.opencontainers.image.licenses=MIT"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        if: steps.check.outputs.build == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: https://github.com/${{ env.UPSTREAM_REPO }}.git#${{ steps.upstream.outputs.sha }}
+          platforms: linux/amd64
+          load: true
+          tags: house-planner:test
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test
+        if: steps.check.outputs.build == 'true'
+        run: |
+          set -u
+          docker run -d --name hp -p 8080:8080 -e HOUSE_PASSWORD=ci-password-123 house-planner:test
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/plan.php || true)
+            [ "$code" = 401 ] && break
+            sleep 1
+          done
+          fail=0
+          for check in "200 /" "401 /api/plan.php" "401 /data/house.json" "403 /api/_lib.php"; do
+            set -- $check
+            got=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8080$2" || true)
+            if [ "$got" = "$1" ]; then echo "ok   $1 $2"; else echo "FAIL $2: expected $1, got $got"; fail=1; fi
+          done
+          [ $fail = 0 ] || docker logs hp
+          docker rm -f hp >/dev/null
+          exit $fail
+
+      - name: Push
+        if: steps.check.outputs.build == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: https://github.com/${{ env.UPSTREAM_REPO }}.git#${{ steps.upstream.outputs.sha }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+
+      # GitHub disables scheduled workflows after 60 days without repository
+      # activity. Re-enabling the workflow via the API resets that timer, so a
+      # quiet upstream never silently stops the update checks.
+      - name: Keep schedule alive
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/build.yml/enable"

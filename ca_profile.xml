@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<CommunityApplications>
+  <Profile>
+    Unraid Community Apps template for [House Planner](https://github.com/egmalt/house-planner), a self-hosted house and plot planner.
+
+    The container image is built by GitHub Actions straight from the upstream source and rebuilt automatically whenever upstream changes, so updates show up in Unraid's Docker tab without any manual release step.
+
+    Template or image problems: open an issue on this repository. Problems with the app itself: report them upstream.
+  </Profile>
+  <Icon>https://raw.githubusercontent.com/jarretraim/house-planner-unraid/main/icon.png</Icon>
+  <WebPage>https://github.com/jarretraim/house-planner-unraid</WebPage>
+</CommunityApplications>

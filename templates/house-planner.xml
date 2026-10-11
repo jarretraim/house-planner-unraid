@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>house-planner</Name>
+  <Repository>ghcr.io/jarretraim/house-planner:latest</Repository>
+  <Registry>https://github.com/jarretraim/house-planner-unraid/pkgs/container/house-planner</Registry>
+  <Network>bridge</Network>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Icon>https://raw.githubusercontent.com/jarretraim/house-planner-unraid/main/icon.png</Icon>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <Overview>House Planner is a self-hosted, browser-based planner for a house and its plot: floor plans in 2D, a 3D view with openings, the site on a map, and a materials list with prices and purchase tracking. The plan is stored on the server as JSON with numbered versions and named snapshots, behind a single password.&#xD;
+&#xD;
+On first start, either set HOUSE_PASSWORD (8+ characters) or leave it empty and open http://[IP]:[PORT]/api/setup.php to set a password in the setup wizard. HOUSE_PASSWORD is only applied to empty storage; to change it later, delete config.php from the appdata folder and restart.&#xD;
+&#xD;
+This image is built automatically from the unmodified upstream source (github.com/egmalt/house-planner) and rebuilt whenever upstream changes.</Overview>
+  <Support>https://github.com/jarretraim/house-planner-unraid/issues</Support>
+  <Project>https://github.com/egmalt/house-planner</Project>
+  <ReadMe>https://github.com/jarretraim/house-planner-unraid#readme</ReadMe>
+  <TemplateURL>https://raw.githubusercontent.com/jarretraim/house-planner-unraid/main/templates/house-planner.xml</TemplateURL>
+  <Category>Productivity: Tools:</Category>
+  <ExtraSearchTerms>house home floor plan floorplan architecture 3d construction</ExtraSearchTerms>
+  <Requires>For HTTPS or access outside your LAN, put it behind a reverse proxy (SWAG, Nginx Proxy Manager, etc.).</Requires>
+  <License>MIT</License>
+  <Config Name="WebUI Port" Target="8080" Default="8080" Mode="tcp" Description="HTTP port for the web UI." Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="Data" Target="/var/lib/house-planner" Default="/mnt/user/appdata/house-planner" Mode="rw" Description="Plan, version history, snapshots and config.php." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/house-planner</Config>
+  <Config Name="Password" Target="HOUSE_PASSWORD" Default="" Description="Optional. At least 8 characters. Sets the login password on first start so the setup wizard is skipped. Ignored once storage is initialised." Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="Setup Key" Target="HOUSE_SETUP_KEY" Default="" Description="Optional. If set, the /api/setup.php wizard requires this extra key." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Demo Mode" Target="HOUSE_DEMO" Default="" Description="Set to 1 for a public demo: no password, and the plan resets every hour. Leave empty for normal use." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+</Container>
